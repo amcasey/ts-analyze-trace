@@ -369,7 +369,7 @@ function normalizePositions(stream: stream.Readable, positions: ReadonlyArray<nu
                 ch === code_CarriageReturn ||
                 /^\s$/.test(String.fromCharCode(ch));
 
-            // TODO (acasey): delete
+            // This is handy when debugging
             // console.error(`${currOffset}\t${/^[a-zA-Z0-9!@#$%^&*()[\]{}\\/;':"<,>.?`~+=_\-]$/.test(String.fromCharCode(ch)) ? String.fromCharCode(ch) : "0x" + ch.toString(16)}\t(${currLineChar[0]},${currLineChar[1]})\t${isTrivia ? "Triv" : "Not"}\tS${state}\tB${braceDepth}`);
 
             if (!isTrivia) {
@@ -400,7 +400,7 @@ function normalizePositions(stream: stream.Readable, positions: ReadonlyArray<nu
                 state = nextState;
             }
 
-            // TODO (acasey): exit if all positions handled?
+            // TODO (https://github.com/amcasey/ts-analyze-trace/issues/4)
         }
 
         function onEof() {

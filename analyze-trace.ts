@@ -65,7 +65,7 @@ function parse(tracePath: string): Promise<ParseResult> {
             // Metadata objects are uninteresting
             if (value.ph === "M") return;
 
-            // TODO (acasey): instant events
+            // TODO (https://github.com/amcasey/ts-analyze-trace/issues/1)
             if (value.ph === "i" || value.ph === "I") return;
 
             const event = value as Event;
@@ -186,7 +186,7 @@ async function addTypeTrees(root: EventSpan): Promise<void> {
 
 async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
     const positionMap = new Map<string, (number | LineChar)[]>();
-    recordPositions(root, /*currentFile*/ undefined); // TODO (acasey): need to cover types too
+    recordPositions(root, /*currentFile*/ undefined);
 
     const map = new Map<string, Map<number | string, LineChar>>(); // NB: can't use LineChar as map key
     for (const entry of Array.from(positionMap.entries())) {
@@ -296,9 +296,10 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
     function eventToString(): string | undefined {
         const event = curr.event!;
         switch (event.name) {
-            // TODO (acasey)
+            // TODO (https://github.com/amcasey/ts-analyze-trace/issues/2)
             // case "findSourceFile":
             //     return `Load file ${event.args!.fileName}`;
+            // TODO (https://github.com/amcasey/ts-analyze-trace/issues/3)
             // case "emit":
             //     return `Emit`;
             case "checkSourceFile":
