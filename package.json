@@ -1,0 +1,33 @@
+{
+  "name": "@amcasey/ts-analyze-trace",
+  "version": "0.1.0",
+  "description": "Simplify type dumps produced by tsc --generateTrace",
+  "main": "index.js",
+  "bin": {
+    "ts-analyze-trace": "./bin/ts-analyze-trace"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amcasey/ts-analyze-trace.git"
+  },
+  "author": "Andrew Casey",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/amcasey/ts-analyze-trace/issues"
+  },
+  "homepage": "https://github.com/amcasey/ts-analyze-trace#readme",
+  "devDependencies": {
+    "@types/chalk": "^2.2.0",
+    "@types/node": "^14.14.31",
+    "@types/treeify": "^1.0.0",
+    "typescript": "^4.2.3"
+  },
+  "dependencies": {
+    "@amcasey/ts-simplify-types": "^0.5.1",
+    "chalk": "^4.1.0",
+    "treeify": "^1.1.0"
+  }
+}
