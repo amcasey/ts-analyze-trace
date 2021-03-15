@@ -1,6 +1,6 @@
-if (process.argv.length !== 3) {
+if (process.argv.length !== 3 && process.argv.length != 4) {
     const path = require("path");
-    console.error(`Usage: ${path.basename(process.argv[0])} ${path.basename(process.argv[1])} trace_path`);
+    console.error(`Usage: ${path.basename(process.argv[0])} ${path.basename(process.argv[1])} trace_path [type_path]`);
     process.exit(1);
 }
 
@@ -15,7 +15,19 @@ import normalizePositions = require("./normalize-positions");
 
 const Parser = require("jsonparse");
 
-const inPath = process.argv[2];
+const tracePath = process.argv[2];
+const typesPath = process.argv[3];
+
+if (!fs.existsSync(tracePath)) {
+    console.error(`${tracePath} does not exist`);
+    process.exit(2);
+}
+
+if (typesPath && !fs.existsSync(typesPath)) {
+    console.error(`${typesPath} does not exist`);
+    process.exit(3);
+}
+
 const thresholdDuration = 5E5; // microseconds
 const minDuration = 1E5; // microseconds
 const minPercentage = 0.6;
@@ -112,7 +124,7 @@ function parse(tracePath: string): Promise<ParseResult> {
 }
 
 async function main(): Promise<void> {
-    const { minTime, maxTime, spans, unclosedStack } = await parse(inPath);
+    const { minTime, maxTime, spans, unclosedStack } = await parse(tracePath);
 
     if (unclosedStack.length) {
         console.log("Trace ended unexpectedly");
@@ -154,7 +166,9 @@ async function main(): Promise<void> {
 }
 
 async function printHotStacks(root: EventSpan): Promise<void> {
-    await addTypeTrees(root);
+    if (typesPath) {
+        await addTypeTrees(root);
+    }
     const positionMap = await getNormalizedPositions(root);
     const tree = await makePrintableTree(root, /*currentFile*/ undefined, positionMap);
     if (Object.entries(tree).length) {
@@ -174,10 +188,12 @@ async function addTypeTrees(root: EventSpan): Promise<void> {
         const curr = stack.pop()!;
         if (curr.children.length === 0 && curr.event?.name === "structuredTypeRelatedTo") {
             const types = await getTypes();
-            curr.typeTree = {
-                ...getTypeTree(types, curr.event.args!.sourceId),
-                ...getTypeTree(types, curr.event.args!.targetId),
-            };
+            if (types.length) {
+                curr.typeTree = {
+                    ...getTypeTree(types, curr.event.args!.sourceId),
+                    ...getTypeTree(types, curr.event.args!.targetId),
+                };
+            }
         }
 
         stack.push(...curr.children); // Order doesn't matter during this traversal
@@ -255,9 +271,14 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
 let typesCache: undefined | readonly any[];
 async function getTypes(): Promise<readonly any[]> {
     if (!typesCache) {
-        const typesPath = path.join(path.dirname(inPath), path.basename(inPath).replace(/^trace/, "types"));
-        const json = await fs.promises.readFile(typesPath, { encoding: "utf-8" });
-        typesCache = JSON.parse(json) ?? [];
+        try {
+            const json = await fs.promises.readFile(typesPath, { encoding: "utf-8" });
+            typesCache = JSON.parse(json);
+        }
+        catch (e) {
+            console.error(`Error reading types file: ${e.message}`);
+            typesCache = [];
+        }
     }
 
     return typesCache!;
