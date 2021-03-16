@@ -92,10 +92,14 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
         }
     }
 
+    let first = true;
     const projectCount = projects.length;
 
     hadHotSpots.sort((a, b) => b.score - a.score); // Descending
     for (const result of hadHotSpots) {
+        if (!first) console.log();
+        first = false;
+
         const project = result.project;
         if (projectCount > 1 || project.configFilePath) {
             console.log(`Analyzed ${project.configFilePath ?? path.basename(project.tracePath)}`);
@@ -104,10 +108,13 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
     }
 
     for (const errorResult of hadErrors) {
+        if (!first) console.log();
+        first = false;
+
         const project = errorResult.project;
         console.log(`Error analyzing ${project.configFilePath ?? path.basename(project.tracePath)}`);
         if (errorResult.stderr) {
-            console.log(`Error: ${errorResult.stderr}`);
+            console.log(errorResult.stderr);
         }
         else if (errorResult.exitCode) {
             console.log(`Exited with code ${errorResult.exitCode}`);
@@ -119,6 +126,9 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
 
     const interestingCount = hadHotSpots.length + hadErrors.length;
     if (interestingCount < projectCount) {
+        if (!first) console.log();
+        first = false;
+
         console.log(`Found nothing in ${projectCount - interestingCount}${interestingCount ? " other" : ""} project(s)`);
     }
 
@@ -138,8 +148,8 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
         child.on("exit", (code, signal) => {
             resolve({
                 project,
-                stdout,
-                stderr,
+                stdout: stdout.trim(),
+                stderr: stderr.trim(),
                 exitCode: code ?? undefined,
                 signal: signal ?? undefined,
             });
