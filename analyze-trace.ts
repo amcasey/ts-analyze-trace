@@ -204,15 +204,15 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
     const positionMap = new Map<string, (number | LineChar)[]>();
     recordPositions(root, /*currentFile*/ undefined);
 
-    const map = new Map<string, Map<number | string, LineChar>>(); // NB: can't use LineChar as map key
+    const map = new Map<string, Map<string, LineChar>>(); // NB: can't use LineChar as map key
     for (const entry of Array.from(positionMap.entries())) {
         const path = entry[0];
-        const typesStream = fs.createReadStream(path, { encoding: "utf-8" });
+        const sourceStream = fs.createReadStream(path, { encoding: "utf-8" });
 
         const rawPositions = entry[1];
-        const normalizedPositions = await normalizePositions(typesStream, rawPositions);
+        const normalizedPositions = await normalizePositions(sourceStream, rawPositions);
 
-        const pathMap = new Map<number | string, LineChar>();
+        const pathMap = new Map<string, LineChar>();
         for (let i = 0; i < rawPositions.length; i++) {
             const rawPosition = rawPositions[i];
             const key = typeof rawPosition === "number" ? rawPosition.toString() : getLineCharMapKey(...rawPosition as LineChar);
@@ -222,7 +222,7 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
         map.set(path, pathMap);
     }
 
-    return map as any as PositionMap; // Cast away undefined
+    return map;
 
     function recordPositions(span: EventSpan, currentFile: string | undefined): void {
         if (span.event?.name === "checkSourceFile") {
