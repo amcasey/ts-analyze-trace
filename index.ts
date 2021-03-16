@@ -75,30 +75,54 @@ async function main(): Promise<boolean> {
 }
 
 async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
-    let sawError = false;
-    // TODO (acasey): sort output
     const results = await Promise.all(projects.map(p => limit(analyzeProject, p)));
-    for (const result of results) {
-        const project = result.project;
-        console.log(`Analyzing ${project.configFilePath ?? path.basename(project.tracePath)}`);
 
-        if (result.stderr) {
-            sawError = true;
-            console.log(`Error: ${result.stderr}`);
+    const hadHotSpots: (ProjectResult & { score: number })[] = [];
+    const hadErrors: ProjectResult[] = [];
+    for (const result of results) {
+        if (result.stderr || result.exitCode || result.signal) {
+            hadErrors.push(result);
+            continue;
         }
-        else if (result.exitCode) {
-            sawError = true;
-            console.log(`Exited with code ${result.exitCode}`);
-        }
-        else if (result.signal) {
-            sawError = true;
-            console.log(`Terminated with signal ${result.signal}`);
-        }
-        else {
-            console.log(result.stdout);
+
+        // First will be the largest, so only need to match one
+        const match = result.stdout.match(/\((\d+)[ ]*ms\)/);
+        if (match) {
+            hadHotSpots.push({...result, score: +match[1] });
         }
     }
-    return !sawError;
+
+    const projectCount = projects.length;
+
+    hadHotSpots.sort((a, b) => b.score - a.score); // Descending
+    for (const result of hadHotSpots) {
+        const project = result.project;
+        if (projectCount > 1 || project.configFilePath) {
+            console.log(`Analyzed ${project.configFilePath ?? path.basename(project.tracePath)}`);
+        }
+        console.log(result.stdout);
+    }
+
+    for (const errorResult of hadErrors) {
+        const project = errorResult.project;
+        console.log(`Error analyzing ${project.configFilePath ?? path.basename(project.tracePath)}`);
+        if (errorResult.stderr) {
+            console.log(`Error: ${errorResult.stderr}`);
+        }
+        else if (errorResult.exitCode) {
+            console.log(`Exited with code ${errorResult.exitCode}`);
+        }
+        else if (errorResult.signal) {
+            console.log(`Terminated with signal ${errorResult.signal}`);
+        }
+    }
+
+    const interestingCount = hadHotSpots.length + hadErrors.length;
+    if (interestingCount < projectCount) {
+        console.log(`Found nothing in ${projectCount - interestingCount}${interestingCount ? " other" : ""} project(s)`);
+    }
+
+    return hadErrors.length > 0;
 }
 
 async function analyzeProject(project: Project): Promise<ProjectResult> {
