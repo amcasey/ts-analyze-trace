@@ -48,6 +48,12 @@ async function main(): Promise<boolean> {
         try {
             const legendText = await fs.promises.readFile(legendPath, { encoding: "utf-8" });
             projects = JSON.parse(legendText);
+
+            const traceParentDir = path.dirname(traceDir);
+            for (const project of projects!) {
+                project.tracePath = path.resolve(traceParentDir, project.tracePath);
+                project.typesPath = path.resolve(traceParentDir, project.typesPath);
+            }
         }
         catch (e) {
             console.error(`Error reading legend file: ${e.message}`);
