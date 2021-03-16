@@ -28,6 +28,7 @@
   "dependencies": {
     "@amcasey/ts-simplify-types": "^0.5.1",
     "chalk": "^4.1.0",
+    "p-limit": "^3.1.0",
     "treeify": "^1.1.0"
   }
 }

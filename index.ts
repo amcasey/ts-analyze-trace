@@ -4,9 +4,13 @@ if (process.argv.length !== 3) {
     process.exit(1);
 }
 
-import fs = require("fs");
-import path = require("path");
 import cp = require("child_process");
+import fs = require("fs");
+import os = require("os");
+import path = require("path");
+
+import plimit = require("p-limit");
+const limit = plimit(os.cpus().length);
 
 const traceDir = process.argv[2];
 
@@ -26,6 +30,14 @@ interface Project {
     configFilePath?: string;
     tracePath: string;
     typesPath: string;
+}
+
+interface ProjectResult {
+    project: Project;
+    stdout: string;
+    stderr: string;
+    exitCode: number | undefined;
+    signal: NodeJS.Signals | undefined;
 }
 
 async function main(): Promise<boolean> {
@@ -59,48 +71,54 @@ async function main(): Promise<boolean> {
         }
     }
 
-    return await analyzeTraces(projects);
+    return await analyzeProjects(projects);
 }
 
-async function analyzeTraces(projects: readonly Project[]): Promise<boolean> {
+async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
     let sawError = false;
     // TODO (acasey): sort output
-    for (const project of projects) { // TODO (acasey): parallel
+    const results = await Promise.all(projects.map(p => limit(analyzeProject, p)));
+    for (const result of results) {
+        const project = result.project;
         console.log(`Analyzing ${project.configFilePath ?? path.basename(project.tracePath)}`);
-        try {
-            console.log(await analyzeTrace(project.tracePath, project.typesPath));
-        }
-        catch (e) {
+
+        if (result.stderr) {
             sawError = true;
-            console.log(`Error: ${e.message}`);
+            console.log(`Error: ${result.stderr}`);
+        }
+        else if (result.exitCode) {
+            sawError = true;
+            console.log(`Exited with code ${result.exitCode}`);
+        }
+        else if (result.signal) {
+            sawError = true;
+            console.log(`Terminated with signal ${result.signal}`);
+        }
+        else {
+            console.log(result.stdout);
         }
     }
     return !sawError;
 }
 
-async function analyzeTrace(tracePath: string, typesPath: string): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-        const child = cp.fork("./analyze-trace", [tracePath, typesPath], { stdio: "pipe", env: { FORCE_COLOR: '1' } });
+async function analyzeProject(project: Project): Promise<ProjectResult> {
+    return new Promise<ProjectResult>(resolve => {
+        const child = cp.fork("./analyze-trace", [project.tracePath, project.typesPath], { stdio: "pipe", env: { FORCE_COLOR: '1' } });
 
-        let output = "";
-        let errors = "";
+        let stdout = "";
+        let stderr = "";
 
-        child.stdout!.on("data", chunk => output += chunk);
-        child.stderr!.on("data", chunk => errors += chunk);
+        child.stdout!.on("data", chunk => stdout += chunk);
+        child.stderr!.on("data", chunk => stderr += chunk);
 
         child.on("exit", (code, signal) => {
-            if (errors) {
-                reject(new Error(errors));
-            }
-            else if (code) {
-                reject(new Error(`Exited with code ${code}`));
-            }
-            else if (signal) {
-                reject(new Error(`Terminated with signal ${signal}`));
-            }
-            else {
-                resolve(output);
-            }
+            resolve({
+                project,
+                stdout,
+                stderr,
+                exitCode: code ?? undefined,
+                signal: signal ?? undefined,
+            });
         });
     });
 }
