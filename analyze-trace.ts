@@ -32,7 +32,7 @@ const thresholdDuration = 5E5; // microseconds
 const minDuration = 1E5; // microseconds
 const minPercentage = 0.6;
 
-main().catch(err => console.log(`Internal Error: ${err.message}\n${err.stack}`));
+main().catch(err => console.error(`Internal Error: ${err.message}\n${err.stack}`));
 
 type LineChar = normalizePositions.LineChar;
 type PositionMap = Map<string, Map<string, LineChar>>; // Path to position (offset or LineChar) to LineChar
@@ -206,20 +206,24 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
 
     const map = new Map<string, Map<string, LineChar>>(); // NB: can't use LineChar as map key
     for (const entry of Array.from(positionMap.entries())) {
-        const path = entry[0];
-        const sourceStream = fs.createReadStream(path, { encoding: "utf-8" });
+        try {
+            const path = entry[0];
+            const sourceStream = fs.createReadStream(path, { encoding: "utf-8" });
 
-        const rawPositions = entry[1];
-        const normalizedPositions = await normalizePositions(sourceStream, rawPositions);
+            const rawPositions = entry[1];
+            const normalizedPositions = await normalizePositions(sourceStream, rawPositions);
 
-        const pathMap = new Map<string, LineChar>();
-        for (let i = 0; i < rawPositions.length; i++) {
-            const rawPosition = rawPositions[i];
-            const key = typeof rawPosition === "number" ? rawPosition.toString() : getLineCharMapKey(...rawPosition as LineChar);
-            pathMap.set(key, normalizedPositions[i]);
+            const pathMap = new Map<string, LineChar>();
+            for (let i = 0; i < rawPositions.length; i++) {
+                const rawPosition = rawPositions[i];
+                const key = typeof rawPosition === "number" ? rawPosition.toString() : getLineCharMapKey(...rawPosition as LineChar);
+                pathMap.set(key, normalizedPositions[i]);
+            }
+
+            map.set(path, pathMap);
+        } catch {
+            // Not finding a file is expected if this isn't the box on which the trace was recorded.
         }
-
-        map.set(path, pathMap);
     }
 
     return map;
@@ -332,9 +336,14 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
                 return `Compute variance of type ${event.args!.id}`;
             default:
                 if (event.cat === "check" && event.args && event.args.pos && event.args.end) {
-                    const updatedPos = positionMap.get(currentFile!)!.get(event.args.pos.toString())!;
-                    const updatedEnd = positionMap.get(currentFile!)!.get(event.args.end.toString())!;
-                    return `${unmangleCamelCase(event.name)} from (line ${updatedPos[0]}, char ${updatedPos[1]}) to (line ${updatedEnd[0]}, char ${updatedEnd[1]})`;
+                    if (positionMap.has(currentFile!)) {
+                        const updatedPos = positionMap.get(currentFile!)!.get(event.args.pos.toString())!;
+                        const updatedEnd = positionMap.get(currentFile!)!.get(event.args.end.toString())!;
+                        return `${unmangleCamelCase(event.name)} from (line ${updatedPos[0]}, char ${updatedPos[1]}) to (line ${updatedEnd[0]}, char ${updatedEnd[1]})`;
+                    }
+                    else {
+                        return `${unmangleCamelCase(event.name)} from offset ${event.args.pos} to offset ${event.args.end}`;
+                    }
                 }
                 return undefined;
         }
@@ -350,10 +359,12 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
             const type = JSON.parse(typeString);
             if (type.location) {
                 const path = type.location.path;
-                const updatedPosition = positionMap.get(path)!.get(getLineCharMapKey(type.location.line, type.location.char))!;
-                [ type.location.line, type.location.char ] = updatedPosition;
+                if (positionMap.has(path)) {
+                    const updatedPosition = positionMap.get(path)!.get(getLineCharMapKey(type.location.line, type.location.char))!;
+                    [ type.location.line, type.location.char ] = updatedPosition;
 
-                typeString = JSON.stringify(type).replace(path, formatPath(path));
+                    typeString = JSON.stringify(type).replace(path, formatPath(path));
+                }
             }
 
             newTree[typeString] = updateTypeTreePositions(subtree);

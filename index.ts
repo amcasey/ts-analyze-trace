@@ -14,7 +14,7 @@ const limit = plimit(os.cpus().length);
 
 const traceDir = process.argv[2];
 
-if (!fs.statSync(traceDir)?.isDirectory()) {
+if (!fs.existsSync(traceDir) || !fs.statSync(traceDir)?.isDirectory()) {
     console.error(`${traceDir} is not a directory`);
     process.exit(2);
 }
@@ -49,10 +49,9 @@ async function main(): Promise<boolean> {
             const legendText = await fs.promises.readFile(legendPath, { encoding: "utf-8" });
             projects = JSON.parse(legendText);
 
-            const traceParentDir = path.dirname(traceDir);
             for (const project of projects!) {
-                project.tracePath = path.resolve(traceParentDir, project.tracePath);
-                project.typesPath = path.resolve(traceParentDir, project.typesPath);
+                project.tracePath = path.resolve(traceDir, path.basename(project.tracePath));
+                project.typesPath = path.resolve(traceDir, path.basename(project.typesPath));
             }
         }
         catch (e) {
