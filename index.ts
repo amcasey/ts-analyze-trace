@@ -44,7 +44,7 @@ async function main(): Promise<boolean> {
     let projects: undefined | Project[];
 
     const legendPath = path.join(traceDir, "legend.json");
-    if (await fs.promises.stat(legendPath).then(stats => stats.isFile()).catch(_ => false)) {
+    if (await isFile(legendPath)) {
         try {
             const legendText = await fs.promises.readFile(legendPath, { encoding: "utf-8" });
             projects = JSON.parse(legendText);
@@ -141,8 +141,13 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
 }
 
 async function analyzeProject(project: Project): Promise<ProjectResult> {
+    const args = [ project.tracePath ];
+    if (await isFile(project.typesPath)) {
+        args.push(project.typesPath);
+    }
+
     return new Promise<ProjectResult>(resolve => {
-        const child = cp.fork("./analyze-trace", [project.tracePath, project.typesPath], { stdio: "pipe", env: { FORCE_COLOR: '1' } });
+        const child = cp.fork("./analyze-trace", args, { stdio: "pipe", env: { FORCE_COLOR: '1' } });
 
         let stdout = "";
         let stderr = "";
@@ -160,4 +165,8 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
             });
         });
     });
+}
+
+function isFile(path: string): Promise<boolean> {
+    return fs.promises.stat(path).then(stats => stats.isFile()).catch(_ => false);
 }
