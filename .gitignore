@@ -3,3 +3,4 @@
 *.d.ts
 node_modules
 *.tsbuildinfo
+run-normalize-positions.ts
