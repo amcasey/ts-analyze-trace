@@ -147,7 +147,7 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
     }
 
     return new Promise<ProjectResult>(resolve => {
-        const child = cp.fork("./analyze-trace", args, { stdio: "pipe", env: { FORCE_COLOR: '1' } });
+        const child = cp.fork(path.join(__dirname, "analyze-trace"), args, { stdio: "pipe", env: { FORCE_COLOR: '1' } });
 
         let stdout = "";
         let stderr = "";
