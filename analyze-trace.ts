@@ -259,7 +259,7 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
                 recordPosition(location.path, [ location.line, location.char ]);
             }
 
-            recordPositionsInTypeTree(typeTree[type]);
+            recordPositionsInTypeTree(typeTree[typeString]);
         }
     }
 
@@ -363,8 +363,10 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
                     const updatedPosition = positionMap.get(path)!.get(getLineCharMapKey(type.location.line, type.location.char))!;
                     [ type.location.line, type.location.char ] = updatedPosition;
 
-                    typeString = JSON.stringify(type).replace(path, formatPath(path));
+                    typeString = JSON.stringify(type);
                 }
+
+                typeString = typeString.replace(path, formatPath(path));
             }
 
             newTree[typeString] = updateTypeTreePositions(subtree);
