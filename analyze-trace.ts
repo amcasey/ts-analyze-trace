@@ -216,7 +216,7 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
             const pathMap = new Map<string, LineChar>();
             for (let i = 0; i < rawPositions.length; i++) {
                 const rawPosition = rawPositions[i];
-                const key = typeof rawPosition === "number" ? rawPosition.toString() : getLineCharMapKey(...rawPosition as LineChar);
+                const key = typeof rawPosition === "number" ? Math.abs(rawPosition).toString() : getLineCharMapKey(...rawPosition as LineChar);
                 pathMap.set(key, normalizedPositions[i]);
             }
 
@@ -238,7 +238,7 @@ async function getNormalizedPositions(root: EventSpan): Promise<PositionMap> {
                 recordPosition(currentFile, args.pos);
             }
             if (args?.end) {
-                recordPosition(currentFile, args.end);
+                recordPosition(currentFile, -args.end); // Negative since end should not be moved past trivia
             }
         }
 
