@@ -333,7 +333,7 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
                 const args = event.args!;
                 return `Compare types ${args.sourceId} and ${args.targetId}`;
             case "getVariancesWorker":
-                return `Compute variance of type ${event.args!.id}`;
+                return `Determine variance of type ${event.args!.id}`;
             default:
                 if (event.cat === "check" && event.args && event.args.pos && event.args.end) {
                     if (positionMap.has(currentFile!)) {
