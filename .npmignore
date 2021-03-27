@@ -3,3 +3,4 @@
 *.map
 tsconfig.json
 *.tsbuildinfo
+vendor

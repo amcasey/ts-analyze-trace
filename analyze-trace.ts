@@ -1,6 +1,37 @@
-if (process.argv.length !== 3 && process.argv.length != 4) {
+// node ./analyze-trace.js vendor/mui/trace.json vendor/mui/types.json --json output.json
+
+type Opts = {
+    json?: string, 
+    thresholdDuration?: string
+    minDuration?: string
+    minPercentage?: string
+}
+
+const args: string[] = []
+const opts: Opts  = {}
+
+let foundOpt: string | undefined = undefined
+process.argv.forEach((arg, i) => {
+    if (foundOpt) {
+        opts[foundOpt] = arg
+        foundOpt = undefined
+        return
+    }
+
+    if (arg.startsWith("--")) {
+        foundOpt = arg.replace("--", "")
+    } else {
+        args.push(arg)
+    }
+});
+
+if (args.length !== 3 && args.length != 4) {
     const path = require("path");
     console.error(`Usage: ${path.basename(process.argv[0])} ${path.basename(process.argv[1])} trace_path [type_path]`);
+    console.error(`Options:  --json              [path]           Prints a JSON object of the results to stdout`);
+    console.error(`          --thresholdDuration [default: 50000] How many ms should a span with children use for highlighting`);
+    console.error(`          --minDuration       [default: 10000] How long should a single span take before being classed as interesting`);
+    console.error(`          --minPercentage     [default: 0.6]   The threshold for being interesting based on % of call stack`);
     process.exit(1);
 }
 
@@ -28,9 +59,9 @@ if (typesPath && !fs.existsSync(typesPath)) {
     process.exit(3);
 }
 
-const thresholdDuration = 5E5; // microseconds
-const minDuration = 1E5; // microseconds
-const minPercentage = 0.6;
+const thresholdDuration = Number(opts.thresholdDuration) || 5E5; // microseconds
+const minDuration = Number(opts.minDuration) || 1E5; // microseconds
+const minPercentage = Number(opts.minPercentage) || 0.6;
 
 main().catch(err => console.error(`Internal Error: ${err.message}\n${err.stack}`));
 
@@ -123,9 +154,9 @@ function parse(tracePath: string): Promise<ParseResult> {
     });
 }
 
+
 async function main(): Promise<void> {
     const { minTime, maxTime, spans, unclosedStack } = await parse(tracePath);
-
     if (unclosedStack.length) {
         console.log("Trace ended unexpectedly");
 
@@ -162,18 +193,41 @@ async function main(): Promise<void> {
         }
     }
 
-    await printHotStacks(root);
+    await makeHotStacks(root);
 }
 
-async function printHotStacks(root: EventSpan): Promise<void> {
+type TreeNode = {
+    type: string
+    time?: string
+    message: string
+    terseMessage: string
+    start?: {
+        file: string
+        offset?: number
+    },
+    end?: {
+        file: string
+        offset?: number
+    }
+    children: TreeNode[]
+}
+
+async function makeHotStacks(root: EventSpan): Promise<void> {
     if (typesPath) {
         await addTypeTrees(root);
     }
+
     const positionMap = await getNormalizedPositions(root);
+
     const tree = await makePrintableTree(root, /*currentFile*/ undefined, positionMap);
-    if (Object.entries(tree).length) {
+    
+    if (tree && Object.entries(tree).length) {    
+        if (opts.json) {
+            fs.writeFileSync(opts.json, JSON.stringify(tree, null, "  "))
+        }
         console.log("Hot Spots");
-        console.log(treeify.asTree(tree, /*showValues*/ false, /*hideFunctions*/ true));
+        const consoleTree = treeNodeToTreeifyTree(tree!)
+        console.log(treeify.asTree(consoleTree, /*showValues*/ false, /*hideFunctions*/ true));
     }
     else {
         console.log("No hot spots found")
@@ -288,38 +342,48 @@ async function getTypes(): Promise<readonly any[]> {
     return typesCache!;
 }
 
-async function makePrintableTree(curr: EventSpan, currentFile: string | undefined, positionMap: PositionMap): Promise<{}> {
-    // Sort slow to fast
-    let childTree = {};
-
+async function makePrintableTree(curr: EventSpan, currentFile: string | undefined, positionMap: PositionMap): Promise<TreeNode | undefined> {
     if (curr.event?.name === "checkSourceFile") {
         currentFile = curr.event.args!.path;
     }
 
-    if (curr.children.length) {
-        const sortedChildren = curr.children.sort((a, b) => (b.end - b.start) - (a.end - a.start));
-        for (const child of sortedChildren) {
-            Object.assign(childTree, await makePrintableTree(child, currentFile, positionMap));
+    const node = eventToTreeNode();
+    if (node) {
+        node.time = `${Math.round((curr.end - curr.start) / 1000)}ms`
+        
+        if (curr.children.length) {
+            const sortedChildren = curr.children.sort((a, b) => (b.end - b.start) - (a.end - a.start));
+            const nodes: TreeNode[] = []
+
+            for (const child of sortedChildren) {
+                const tree = await makePrintableTree(child, currentFile, positionMap)
+                if (tree) nodes.push(tree)
+            }
+
+            node.children = nodes
         }
     }
 
-    if (curr.typeTree) {
-        Object.assign(childTree, updateTypeTreePositions(curr.typeTree));
+    if (curr.typeTree && node) {
+       updateTypeTreePositions(node, curr.typeTree);
     }
 
-    if (curr.event) {
-        const eventStr = eventToString();
-        if (eventStr) {
-            let result = {};
-            result[`${eventStr} (${Math.round((curr.end - curr.start) / 1000)}ms)`] = childTree;
-            return result;
+    return node;
+
+    function eventToTreeNode(): TreeNode | undefined {
+        const treeNode: TreeNode = {
+            message: "",
+            terseMessage: "",
+            type: "hot-spots",
+            children: [],
+            start: {
+                file: currentFile!
+            }
         }
-    }
+        if (!curr.event) return treeNode
 
-    return childTree;
-
-    function eventToString(): string | undefined {
-        const event = curr.event!;
+        const event = curr.event;
+        treeNode.type = event.name
         switch (event.name) {
             // TODO (https://github.com/amcasey/ts-analyze-trace/issues/2)
             // case "findSourceFile":
@@ -328,28 +392,50 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
             // case "emit":
             //     return `Emit`;
             case "checkSourceFile":
-                return `Check file ${formatPath(currentFile!)}`;
+                treeNode.message = `Check file ${formatPath(currentFile!)}`
+                treeNode.terseMessage = `Check file ${path.basename(currentFile!)}`
+                return treeNode
+
             case "structuredTypeRelatedTo":
                 const args = event.args!;
-                return `Compare types ${args.sourceId} and ${args.targetId}`;
+                treeNode.message = `Compare types ${args.sourceId} and ${args.targetId}`;
+                treeNode.terseMessage = `Compare types ${args.sourceId} and ${args.targetId}`;
+                // TODO: Add start and end links
+                return 
+
             case "getVariancesWorker":
-                return `Compute variance of type ${event.args!.id}`;
+                treeNode.message = `Compute variance of type ${event.args!.id}`;
+                treeNode.terseMessage = `Compute variance of type ${event.args!.id}`;
+                return 
+
             default:
                 if (event.cat === "check" && event.args && event.args.pos && event.args.end) {
                     if (positionMap.has(currentFile!)) {
                         const updatedPos = positionMap.get(currentFile!)!.get(event.args.pos.toString())!;
                         const updatedEnd = positionMap.get(currentFile!)!.get(event.args.end.toString())!;
-                        return `${unmangleCamelCase(event.name)} from (line ${updatedPos[0]}, char ${updatedPos[1]}) to (line ${updatedEnd[0]}, char ${updatedEnd[1]})`;
+                        treeNode.message =  `${unmangleCamelCase(event.name)} from (line ${updatedPos[0]}, char ${updatedPos[1]}) to (line ${updatedEnd[0]}, char ${updatedEnd[1]})`;
+                        treeNode.terseMessage = unmangleCamelCase(event.name);
+                        treeNode.start = {
+                            file: currentFile!,
+                            offset: event.args.pos,
+                        }
+                        treeNode.end = {
+                            file: currentFile!,
+                            offset: event.args.end,
+                        }
+                        return treeNode;
                     }
                     else {
-                        return `${unmangleCamelCase(event.name)} from offset ${event.args.pos} to offset ${event.args.end}`;
+                        treeNode.message = `${unmangleCamelCase(event.name)} from offset ${event.args.pos} to offset ${event.args.end}`
+                        treeNode.terseMessage = unmangleCamelCase(event.name);
+                        return treeNode;
                     }
                 }
                 return undefined;
         }
     }
 
-    function updateTypeTreePositions(typeTree: any): any {
+    function updateTypeTreePositions(node: TreeNode, typeTree: any): any {
         if (!typeTree) return;
 
         let newTree = {};
@@ -369,7 +455,7 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
                 typeString = typeString.replace(path, formatPath(path));
             }
 
-            newTree[typeString] = updateTypeTreePositions(subtree);
+            newTree[typeString] = updateTypeTreePositions(node, subtree);
         }
 
         return newTree;
@@ -407,4 +493,19 @@ function unmangleCamelCase(name: string) {
 
 function getLineCharMapKey(line: number, char: number) {
     return `${line},${char}`;
+}
+
+function treeNodeToTreeifyTree(node: TreeNode) {
+    const obj = {}
+    let value: any | null = null
+    if (node.children){
+        let newValue = {}
+        node.children.forEach(c => {
+             newValue[c.message] = treeNodeToTreeifyTree(c)
+        });
+        value = newValue
+    }
+    obj[node.message] = value
+
+    return obj
 }
