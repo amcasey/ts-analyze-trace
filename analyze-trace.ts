@@ -497,15 +497,17 @@ function getLineCharMapKey(line: number, char: number) {
 
 function treeNodeToTreeifyTree(node: TreeNode) {
     const obj = {}
+    const toKey = (node: TreeNode) => `${node.message} - ${node.time}`
+
     let value: any | null = null
     if (node.children){
         let newValue = {}
         node.children.forEach(c => {
-             newValue[c.message] = treeNodeToTreeifyTree(c)
+             newValue[toKey(c)] = treeNodeToTreeifyTree(c)
         });
         value = newValue
     }
-    obj[node.message] = value
+    obj[toKey(node)] = value
 
     return obj
 }
