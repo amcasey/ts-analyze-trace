@@ -106,6 +106,7 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
 
     const hadHotSpots: (ProjectResult & { score: number })[] = [];
     const hadErrors: ProjectResult[] = [];
+    debugger
     for (const result of results) {
         if (result.stderr || result.exitCode || result.signal) {
             hadErrors.push(result);
