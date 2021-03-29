@@ -108,8 +108,15 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
 
     if (opts.includes("--json")) {
         const writePath = opts[opts.indexOf("--json") + 1]
-        const allJSONs = results.map(p => JSON.parse(fs.readFileSync(p.jsonPath!, "utf8")))
-        fs.writeFileSync(writePath, JSON.stringify(allJSONs))
+        const allJSONs = results.map(p => {
+            if(!p.jsonPath || !fs.existsSync(p.jsonPath)) return
+            return {
+                trace: p.project.tracePath,
+                configFilePath: p.project.configFilePath,
+                repo: JSON.parse(fs.readFileSync(p.jsonPath!, "utf8"))
+            }
+        }).filter(Boolean)
+        fs.writeFileSync(writePath, JSON.stringify(allJSONs, null, "  "))
     }
 
     const hadHotSpots: (ProjectResult & { score: number })[] = [];
@@ -180,11 +187,8 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
     let jsonPath: string | undefined = undefined
     if (opts.includes("--json")) {
         const hash = crypto.createHash('sha256').update(project.tracePath).digest("hex");
-        const jsonIndex = opts.indexOf("--json")
         jsonPath = path.join(os.tmpdir(), hash + ".json")
-        opts[jsonIndex + 1] = jsonPath
     }
-    
 
     return new Promise<ProjectResult>(resolve => {
         const cmd = path.join(__dirname, "analyze-trace")
