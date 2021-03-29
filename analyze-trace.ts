@@ -373,17 +373,15 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
     function eventToTreeNode(): TreeNode | undefined {
         const treeNode: TreeNode = {
             message: "",
-            terseMessage: "",
+            terseMessage: "Hot Spots",
             type: "hot-spots",
-            children: [],
-            start: {
-                file: currentFile!
-            }
+            children: []
         }
         if (!curr.event) return treeNode
 
         const event = curr.event;
         treeNode.type = event.name
+        
         switch (event.name) {
             // TODO (https://github.com/amcasey/ts-analyze-trace/issues/2)
             // case "findSourceFile":
@@ -394,6 +392,10 @@ async function makePrintableTree(curr: EventSpan, currentFile: string | undefine
             case "checkSourceFile":
                 treeNode.message = `Check file ${formatPath(currentFile!)}`
                 treeNode.terseMessage = `Check file ${path.basename(currentFile!)}`
+                treeNode.start = {
+                    file: currentFile!
+                }
+
                 return treeNode
 
             case "structuredTypeRelatedTo":

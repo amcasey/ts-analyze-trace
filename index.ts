@@ -29,6 +29,7 @@ if (args.length !== 3) {
 import cp = require("child_process");
 import fs = require("fs");
 import os = require("os");
+import crypto = require("crypto");
 import path = require("path");
 
 import plimit = require("p-limit");
@@ -56,6 +57,7 @@ interface Project {
 
 interface ProjectResult {
     project: Project;
+    jsonPath: string | undefined
     stdout: string;
     stderr: string;
     exitCode: number | undefined;
@@ -104,9 +106,14 @@ async function main(): Promise<boolean> {
 async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
     const results = await Promise.all(projects.map(p => limit(analyzeProject, p)));
 
+    if (opts.includes("--json")) {
+        const writePath = opts[opts.indexOf("--json") + 1]
+        const allJSONs = results.map(p => JSON.parse(fs.readFileSync(p.jsonPath!, "utf8")))
+        fs.writeFileSync(writePath, JSON.stringify(allJSONs))
+    }
+
     const hadHotSpots: (ProjectResult & { score: number })[] = [];
     const hadErrors: ProjectResult[] = [];
-    debugger
     for (const result of results) {
         if (result.stderr || result.exitCode || result.signal) {
             hadErrors.push(result);
@@ -169,8 +176,20 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
         args.push(project.typesPath);
     }
 
+    // If it's going to include a JSON path, make it per-trace
+    let jsonPath: string | undefined = undefined
+    if (opts.includes("--json")) {
+        const hash = crypto.createHash('sha256').update(project.tracePath).digest("hex");
+        const jsonIndex = opts.indexOf("--json")
+        jsonPath = path.join(os.tmpdir(), hash + ".json")
+        opts[jsonIndex + 1] = jsonPath
+    }
+    
+
     return new Promise<ProjectResult>(resolve => {
-        const child = cp.fork(path.join(__dirname, "analyze-trace"), args.concat(opts), { stdio: "pipe", env: { FORCE_COLOR: '1' } });
+        const cmd = path.join(__dirname, "analyze-trace")
+        const childArgs = args.concat(opts)
+        const child = cp.fork(cmd, childArgs, { stdio: "pipe", env: { FORCE_COLOR: '1' } });
 
         let stdout = "";
         let stderr = "";
@@ -181,6 +200,7 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
         child.on("exit", (code, signal) => {
             resolve({
                 project,
+                jsonPath,
                 stdout: stdout.trim(),
                 stderr: stderr.trim(),
                 exitCode: code ?? undefined,
