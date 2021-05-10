@@ -144,7 +144,7 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
 
         const project = result.project;
         if (projectCount > 1 || project.configFilePath) {
-            console.log(`Analyzed ${project.configFilePath ?? path.basename(project.tracePath)}`);
+            console.log(`Analyzed ${getProjectDescription(project)}`);
         }
         console.log(result.stdout);
     }
@@ -154,7 +154,7 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
         first = false;
 
         const project = errorResult.project;
-        console.log(`Error analyzing ${project.configFilePath ?? path.basename(project.tracePath)}`);
+        console.log(`Error analyzing ${getProjectDescription(project)}`);
         if (errorResult.stderr) {
             console.log(errorResult.stderr);
         }
@@ -175,6 +175,12 @@ async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
     }
 
     return hadErrors.length > 0;
+}
+
+function getProjectDescription(project: Project) {
+    return project.configFilePath
+       ? `${project.configFilePath} (${path.basename(project.tracePath)})`
+       : path.basename(project.tracePath);
 }
 
 async function analyzeProject(project: Project): Promise<ProjectResult> {

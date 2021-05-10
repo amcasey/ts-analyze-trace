@@ -240,13 +240,21 @@ async function addTypeTrees(root: EventSpan): Promise<void> {
 
     while(stack.length) {
         const curr = stack.pop()!;
-        if (curr.children.length === 0 && curr.event?.name === "structuredTypeRelatedTo") {
-            const types = await getTypes();
-            if (types.length) {
-                curr.typeTree = {
-                    ...getTypeTree(types, curr.event.args!.sourceId),
-                    ...getTypeTree(types, curr.event.args!.targetId),
-                };
+        if (curr.children.length === 0) {
+            if (curr.event?.name === "structuredTypeRelatedTo") {
+                const types = await getTypes();
+                if (types.length) {
+                    curr.typeTree = {
+                        ...getTypeTree(types, curr.event.args!.sourceId),
+                        ...getTypeTree(types, curr.event.args!.targetId),
+                    };
+                }
+            }
+            else if (curr.event?.name === "getVariancesWorker") {
+                const types = await getTypes();
+                if (types.length) {
+                    curr.typeTree = getTypeTree(types, curr.event.args!.id);
+                }
             }
         }
 
