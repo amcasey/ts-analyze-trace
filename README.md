@@ -13,3 +13,7 @@ First, build your project with `--generateTrace traceDir`.  Then, run `npx ts-an
 You can invoke `analyze-trace` directly to analyze a single trace (optionally, with types), rather than a whole directory.
 
 You can use `normalize-positions` to convert file offsets to line-character pairs and skip past trivia (whitespace, comments, etc).
+
+## Contributing
+
+Unfortunately, we're unable to accept contributions at present.
