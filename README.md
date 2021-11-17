@@ -6,7 +6,7 @@ The repro can then be used as the basis of a bug report or a starting point for 
 
 ## Usage
 
-First, build your project with `--generateTrace traceDir`.  Then, run `npx ts-analyze-trace traceDir` to see a sorted list of compilation hot-spots.
+First, build your project with `--generateTrace traceDir`.  Then, run `npx @amcasey/ts-analyze-trace traceDir` to see a sorted list of compilation hot-spots.
 
 ## Extras
 
