@@ -1,3 +1,5 @@
+> ⚠️Work on this tool will continue at https://github.com/microsoft/typescript-analyze-trace
+
 # ts-analyze-trace
 Tool for analyzing the output of `tsc --generateTrace` automatically, rather than following the steps [here](https://github.com/microsoft/TypeScript/wiki/Performance-Tracing).
 
