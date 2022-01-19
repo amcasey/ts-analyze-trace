@@ -1,12 +1,35 @@
-if (process.argv.length !== 3) {
+const args: string[] = []
+const opts: string[] = []
+
+let foundOpt: string | undefined = undefined
+process.argv.forEach((arg, i) => {
+    if (foundOpt) {
+        opts.push(foundOpt, arg)
+        foundOpt = undefined
+        return
+    }
+
+    if (arg.startsWith("--")) {
+        foundOpt = arg
+    } else {
+        args.push(arg)
+    }
+});
+
+if (args.length !== 3) {
     const path = require("path");
     console.error(`Usage: ${path.basename(process.argv[0])} ${path.basename(process.argv[1])} trace_dir`);
+    console.error(`Options:  --json              [path]           Prints a JSON object of the results to stdout`);
+    console.error(`          --thresholdDuration [default: 50000] How many ms should a span with children use for highlighting`);
+    console.error(`          --minDuration       [default: 10000] How long should a single span take before being classed as interesting`);
+    console.error(`          --minPercentage     [default: 0.6]   The threshold for being interesting based on % of call stack`);
     process.exit(1);
 }
 
 import cp = require("child_process");
 import fs = require("fs");
 import os = require("os");
+import crypto = require("crypto");
 import path = require("path");
 
 import plimit = require("p-limit");
@@ -34,6 +57,7 @@ interface Project {
 
 interface ProjectResult {
     project: Project;
+    jsonPath: string | undefined
     stdout: string;
     stderr: string;
     exitCode: number | undefined;
@@ -81,6 +105,19 @@ async function main(): Promise<boolean> {
 
 async function analyzeProjects(projects: readonly Project[]): Promise<boolean> {
     const results = await Promise.all(projects.map(p => limit(analyzeProject, p)));
+
+    if (opts.includes("--json")) {
+        const writePath = opts[opts.indexOf("--json") + 1]
+        const allJSONs = results.map(p => {
+            if(!p.jsonPath || !fs.existsSync(p.jsonPath)) return
+            return {
+                trace: p.project.tracePath,
+                configFilePath: p.project.configFilePath,
+                repo: JSON.parse(fs.readFileSync(p.jsonPath!, "utf8"))
+            }
+        }).filter(Boolean)
+        fs.writeFileSync(writePath, JSON.stringify(allJSONs, null, "  "))
+    }
 
     const hadHotSpots: (ProjectResult & { score: number })[] = [];
     const hadErrors: ProjectResult[] = [];
@@ -152,8 +189,17 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
         args.push(project.typesPath);
     }
 
+    // If it's going to include a JSON path, make it per-trace
+    let jsonPath: string | undefined = undefined
+    if (opts.includes("--json")) {
+        const hash = crypto.createHash('sha256').update(project.tracePath).digest("hex");
+        jsonPath = path.join(os.tmpdir(), hash + ".json")
+    }
+
     return new Promise<ProjectResult>(resolve => {
-        const child = cp.fork(path.join(__dirname, "analyze-trace"), args, { stdio: "pipe", env: { FORCE_COLOR: '1' } });
+        const cmd = path.join(__dirname, "analyze-trace")
+        const childArgs = args.concat(opts)
+        const child = cp.fork(cmd, childArgs, { stdio: "pipe", env: { FORCE_COLOR: '1' } });
 
         let stdout = "";
         let stderr = "";
@@ -164,6 +210,7 @@ async function analyzeProject(project: Project): Promise<ProjectResult> {
         child.on("exit", (code, signal) => {
             resolve({
                 project,
+                jsonPath,
                 stdout: stdout.trim(),
                 stderr: stderr.trim(),
                 exitCode: code ?? undefined,
